@@ -9,6 +9,8 @@ Freezetag
 **Planned gamemodes**
 ```
 Cranked
+```
+```
 Blitz
 ```
 
