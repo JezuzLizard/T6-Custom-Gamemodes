@@ -1,14 +1,14 @@
 
 /**
-	T6 Freezetag.
-	Updated: 22/02/2021.
-	Version: 0.1.
-	Authors: Birchy & JezuzLizard.
+    T6 Freezetag.
+    Updated: 22/02/2021.
+    Version: 0.1.
+    Authors: Birchy & JezuzLizard.
  */
 
  /**
-	Features:
-	-Infinite ammo.
+    Features:
+    -Infinite ammo.
     -Server provided loadout.
     -Players freeze when shot.
     -Scores, captures and denies increase as a result 
@@ -16,19 +16,18 @@
   */
 
 /**
-	Intended features:
-	Mark frozen teammates.
-	status icons for frozen/not frozen. (hud element?) <- only show enemies for 2 teams
-	maybe ice coloured hitmarkers or some weird
-	Unfreeze behaviour. (use progress bar)
-	All players frozen win condition.
+    Intended features:
+    Display frozen enemies/allies.
+    'Ice' coloured hitmarkers.
+    Unfreeze behaviour (With progress bar).
+    Last team with an unfrozen player wins.
  */
 
 init(){
     level.playerdamagestub = level.callbackplayerdamage;
     level.callbackplayerdamage = ::callbackplayerdamagehook;
     level.givecustomloadout = ::loadout;
-	level.loadoutkillstreaksenabled = 0;
+    level.loadoutkillstreaksenabled = 0;
     setscoreboardcolumns("", "", "score", "captures", "killsdenied");
     level thread connect();
 }
@@ -45,7 +44,7 @@ spawn(){
     self endon("disconnect");
     for(;;){
         self waittill("spawned_player");
-		self thread ammo();
+        self thread ammo();
     }
 }
 
@@ -59,37 +58,37 @@ ammo(){
 }
 
 frozen(){
-	self endon("disconnect");
-	self enableinvulnerability();
+    self endon("disconnect");
+    self enableinvulnerability();
     self freezecontrols(1);
-	self setclientthirdperson(1);
+    self setclientthirdperson(1);
     self takeallweapons();
-	wait 5; //TODO: Monitor teammates for distance etc etc, place waypoint for self above their head
+    wait 5; //TODO: Monitor teammates for distance etc etc, place waypoint for self above their head
     self loadout();
     self setclientthirdperson(0);
     self freezecontrols(0);
-	self disableinvulnerability();
+    self disableinvulnerability();
 }
 
 loadout(){
-	camo = randomintrange(1,45);
+    camo = randomintrange(1,45);
     weapon = "ballista_mp";
     self takeallweapons();
     self clearperks();
-	self giveweapon(weapon, 0, true(camo, 0, 0, 0, 0));
+    self giveweapon(weapon, 0, true(camo, 0, 0, 0, 0));
     self giveweapon("knife_mp", 0, true(camo, 0, 0, 0, 0));
     self giveweapon("knife_held_mp");
-	self setspawnweapon(weapon);
+    self setspawnweapon(weapon);
     self setperk("specialty_fallheight");
     self setperk("specialty_fastladderclimb");
     self setperk("specialty_fastmantle");
     self setperk("specialty_unlimitedsprint");
     self setperk("specialty_sprintrecovery");
-	return weapon;
+    return weapon;
 }
 
 callbackplayerdamagehook(einflictor, eattacker, idamage, idflags, smeansofdeath, sweapon, vpoint, vdir, shitloc, timeoffset, boneindex){
-	self thread frozen();
+    self thread frozen();
     idamage = 0;
     eattacker.captures++;
     eattacker.score += 200;
