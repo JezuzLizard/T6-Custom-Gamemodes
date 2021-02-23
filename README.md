@@ -3,13 +3,13 @@ A selection of custom game modes for T6 created by JezuzLizard and Birchy.
 
 **Current gamemodes**
 ```
-- Freezetag
+Freezetag
 ```
 
 **Planned gamemodes**
 ```
-- Cranked
-- Blitz
+Cranked
+Blitz
 ```
 
 # Freezetag
