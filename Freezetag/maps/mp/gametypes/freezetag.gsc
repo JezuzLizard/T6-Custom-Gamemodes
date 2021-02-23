@@ -1,6 +1,8 @@
 
 /**
     T6 Freezetag.
+    Description: Shoot enemies to freeze them, stand near your 
+    frozen allies to free them. Last team with unfrozen players wins!
     Updated: 22/02/2021.
     Version: 0.1.
     Authors: Birchy & JezuzLizard.
