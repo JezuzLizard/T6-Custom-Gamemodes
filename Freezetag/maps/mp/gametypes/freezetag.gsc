@@ -1,4 +1,7 @@
 #include maps\mp\gametypes\_hud_util;
+#include maps\mp\_utility;
+#include maps\common_scripts\utility;
+#include maps\mp\gametypes\_globallogic;
 
 /**
     T6 Freezetag.
@@ -27,6 +30,14 @@
  */
 
 init(){
+    if ( getDvarInt("freezetag_railgun_mode") == 1){
+        level.freezetaguserailgunmode = true;
+    }
+    else{
+        level.freezetaguserailgunmode = false;
+    }
+    initializefreezetagteamstructs();
+    level thread trackremainingteams();
     //Set the elimate enemy players (or etc) to freeze enemy players.
     setscoreboardcolumns("", "", "score", "captures", "killsdenied");
     level.playerdamagestub = level.callbackplayerdamage;
@@ -34,12 +45,19 @@ init(){
     level.givecustomloadout = ::loadout;
     level.loadoutkillstreaksenabled = 0;
     level.scorelimit = 0;
+    level.overrideteamscore = 1;
+    level.endgameonscorelimit = 0;
+    level.mayspawn = ::freezetagmayspawn;
     level thread connect();
 }
 
 connect(){
     for(;;){
         level waittill("connected", player);
+        if (level.freezetaguserailgunmode){
+            self setplayerspread( 0 );
+            self setspreadoverride( 1 );
+        }
         player thread spawn();
     }
 }
@@ -75,6 +93,12 @@ frozen(){
     self setclientthirdperson(1);
     self takeallweapons();
     self.frozen = true;
+    level.freezetagteams[self.team].numfrozen++;
+    if(level.freezetagteams[self.team].numfrozen == getplayers(self.team).size){
+        level.freezetagteams[self.team].eliminated = true;
+        level notify("freezetagteameliminated", self.team);
+        return;
+    }
     self.progressbartext settext("BEING UNFROZEN");
     progress = 0;
     for(;;){
@@ -123,6 +147,7 @@ frozen(){
     self setclientthirdperson(0);
     self freezecontrols(0);
     self disableinvulnerability();
+    level.freezetagteams[self.team].numfrozen--;
 }
 
 loadout(){
@@ -148,4 +173,61 @@ callbackplayerdamagehook(einflictor, eattacker, idamage, idflags, smeansofdeath,
     eattacker.captures++;
     eattacker.score += 200;
     [[level.playerdamagestub]](einflictor, eattacker, idamage, idflags, smeansofdeath, sweapon, vpoint, vdir, shitloc, timeoffset, boneindex);
+}
+
+trackremainingteams(){
+    level.totalteamseliminated = 0;
+    while(true){
+        level waittill("freezetagteameliminated", team);
+        level.totalteamseliminated++;
+        if(level.multiTeam){
+            foreach(player in getplayers(team)){
+                    player setclientthirdperson(0);
+                    player freezecontrols(0);
+                    player disableinvulnerability();
+                    player.freezetageliminated = true;
+                    player [[level.spawnspectator]]();
+            }
+        }
+        if(level.totalteamseliminated == (level.teams.size - 1)){
+            winner = level.teams["allies"];
+            foreach(team in level.teams){
+                if(!level.freezetagteams[team].eliminated){
+                    winner = level.teams[team];
+                }
+            }
+            [[ level._setteamscore ]]( winner, game[ "roundswon" ][ winner ] );
+            endGame( winner );
+        }
+    }
+}
+
+isplayervalid(){
+    if(self.frozen){
+        return false;
+    }
+    if(self.freezetagteam.eliminated){
+        return false;
+    }
+    foreach(team in level.teams){
+        if(self.team == team && level.freezetagteams[team].eliminated){
+            return false;
+        }
+    }
+    return true;
+}
+
+initializefreezetagteamstructs(){
+    level.freezetagteams = [];
+    foreach(team in level.teams){
+        level.freezetagteams[team] = spawnstruct();
+        level.freezetagteams[team].eliminated = false;
+        level.freezetagteams[team].numfrozen = 0;
+    }
+}
+
+freezetagmayspawn(){
+    if(is_true(player.freezetageliminated)){
+        return false;
+    }
 }
