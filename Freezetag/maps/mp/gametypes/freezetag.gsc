@@ -1,7 +1,12 @@
-#include maps\mp\gametypes\_hud_util;
-#include maps\mp\_utility;
-#include maps\common_scripts\utility;
-#include maps\mp\gametypes\_globallogic;
+#include maps/mp/gametypes/_globallogic_audio;
+#include maps/mp/gametypes/_globallogic_score;
+#include maps/mp/gametypes/_spawnlogic;
+#include maps/mp/gametypes/_spawning;
+#include maps/mp/gametypes/_gameobjects;
+#include maps/mp/gametypes/_callbacksetup;
+#include maps/mp/gametypes/_globallogic;
+#include maps/mp/gametypes/_hud_util;
+#include maps/mp/_utility;
 
 /**
     T6 Freezetag.
@@ -25,39 +30,27 @@
     Intended features:
     Display frozen enemies/allies.
     'Ice' coloured hitmarkers.
-    Unfreeze behaviour (With progress bar).
+    Visual sugar (frozen indicator to enemies and allies,
+    objective progres bar for player unfreeze, visual fx
+    at frozen players origin, sound effects for freezing, 
+    unfreezing, trigger the +100 score visual if possible)
     Last team with an unfrozen player wins.
  */
 
 init(){
-    if ( getDvarInt("freezetag_railgun_mode") == 1){
-        level.freezetaguserailgunmode = true;
-    }
-    else{
-        level.freezetaguserailgunmode = false;
-    }
-    initializefreezetagteamstructs();
-    level thread trackremainingteams();
-    //Set the elimate enemy players (or etc) to freeze enemy players.
+    //Set the elimate enemy players text(or etc) to freeze enemy players.
     setscoreboardcolumns("", "", "score", "captures", "killsdenied");
     level.playerdamagestub = level.callbackplayerdamage;
     level.callbackplayerdamage = ::callbackplayerdamagehook;
     level.givecustomloadout = ::loadout;
     level.loadoutkillstreaksenabled = 0;
-    level.scorelimit = 0;
-    level.overrideteamscore = 1;
-    level.endgameonscorelimit = 0;
-    level.mayspawn = ::freezetagmayspawn;
     level thread connect();
+    level thread freezetag();
 }
 
 connect(){
     for(;;){
         level waittill("connected", player);
-        if (level.freezetaguserailgunmode){
-            self setplayerspread( 0 );
-            self setspreadoverride( 1 );
-        }
         player thread spawn();
     }
 }
@@ -67,12 +60,8 @@ spawn(){
     self endon("disconnect");
     for(;;){
         self waittill("spawned_player");
-        self thread ammo();
         self.frozen = false;
-        self.progressbar = createsecondaryprogressbar();
-        self.progressbartext = createsecondaryprogressbartext();
-        self.progressbar hideelem();
-        self.progressbartext hideelem();
+        self thread ammo();
     }
 }
 
@@ -85,7 +74,6 @@ ammo(){
     }
 }
 
-//this is messy tidy it
 frozen(){
     self endon("disconnect");
     self enableinvulnerability();
@@ -93,61 +81,33 @@ frozen(){
     self setclientthirdperson(1);
     self takeallweapons();
     self.frozen = true;
-    level.freezetagteams[self.team].numfrozen++;
-    if(level.freezetagteams[self.team].numfrozen == getplayers(self.team).size){
-        level.freezetagteams[self.team].eliminated = true;
-        level notify("freezetagteameliminated", self.team);
-        return;
-    }
-    self.progressbartext settext("BEING UNFROZEN");
     progress = 0;
     for(;;){
+        wait 0.05;
         near = [];
-        //less efficient but god help me the other version didnt work
         for(i = 0; i < level.players.size; i++){
             if(self.team == level.players[i].team){
                 if(self != level.players[i] && distance(self.origin, level.players[i].origin) < 75){
                     near[near.size] = level.players[i];
                 }
-                level.player[i].progressbar hideelem();
-                level.player[i].progressbartext hideelem();
             }
         }
-        if(near.size > 0){
+        if(near.size == 0 && progress < 50){
+            progress--;
+        }else if(progress < 50){
             progress += near.size;
         }else{
-            progress--;
-        }
-        if(progress < 0){
-            progress = 0;
-            self.progressbar hideelem();
-            self.progressbartext hideelem();
-        }else if(progress < 50){
-            self.progressbar showelem();
-            self.progressbartext showelem();
-            self.progressbar updatebar(progress / 50, 0.5);
-            for(i = 0; i < near.size; i++){
-                near[i].progressbartext settext("SAVING TEAMMATE");
-                near[i].progressbar updatebar(progress / 50, 0.5);
-                near[i].progressbartext showelem();
-                near[i].progressbar showelem();
-            }
-        }else{
-            self.progressbar hideelem();
-            self.progressbartext hideelem();
-             for(i = 0; i < near.size; i++){
-                near[i].progressbartext hideelem();
-                near[i].progressbar hideelem();
+            for(i = 0; i < level.players.size; i++){
+                level.players[i].killsdenied++;
+                level.players[i].score += 100;
             }
             break;
         }
-        wait 0.05;
     }
     self loadout();
     self setclientthirdperson(0);
     self freezecontrols(0);
     self disableinvulnerability();
-    level.freezetagteams[self.team].numfrozen--;
 }
 
 loadout(){
@@ -175,59 +135,35 @@ callbackplayerdamagehook(einflictor, eattacker, idamage, idflags, smeansofdeath,
     [[level.playerdamagestub]](einflictor, eattacker, idamage, idflags, smeansofdeath, sweapon, vpoint, vdir, shitloc, timeoffset, boneindex);
 }
 
-trackremainingteams(){
-    level.totalteamseliminated = 0;
-    while(true){
-        level waittill("freezetagteameliminated", team);
-        level.totalteamseliminated++;
-        if(level.multiTeam){
-            foreach(player in getplayers(team)){
-                    player setclientthirdperson(0);
-                    player freezecontrols(0);
-                    player disableinvulnerability();
-                    player.freezetageliminated = true;
-                    player [[level.spawnspectator]]();
-            }
-        }
-        if(level.totalteamseliminated == (level.teams.size - 1)){
-            winner = level.teams["allies"];
-            foreach(team in level.teams){
-                if(!level.freezetagteams[team].eliminated){
-                    winner = level.teams[team];
+//VERY ugly method please refactor me, just a proof of concept
+freezetag(){
+    level waittill("prematch_over");
+    for(;;){
+        wait 0.1;
+        activeteams = [];
+        foreach(team in level.teams){
+            frozenplayers = 0;
+            totalplayers = 0;
+            for(i = 0; i < level.players.size; i++){
+                if(level.players[i].team == team){
+                    totalplayers++;
+                    if(level.players[i].frozen){
+                        frozenplayers++;
+                    }
                 }
             }
-            [[ level._setteamscore ]]( winner, game[ "roundswon" ][ winner ] );
-            endGame( winner );
+            if(frozenplayers != totalplayers){
+                activeteams[activeteams.size] = team;
+            }
+            game["teamScores"][team] = totalplayers - frozenplayers;
+            maps/mp/gametypes/_globallogic_score::updateteamscores(team);
         }
-    }
-}
-
-isplayervalid(){
-    if(self.frozen){
-        return false;
-    }
-    if(self.freezetagteam.eliminated){
-        return false;
-    }
-    foreach(team in level.teams){
-        if(self.team == team && level.freezetagteams[team].eliminated){
-            return false;
+        if(activeteams.size == 1){
+            first = getsubstr(activeteams[0], 0, 1);
+            first = toupper(first);
+            rest = getsubstr(activeteams[0], 1);
+            thread endgame(activeteams[0], first + rest + " froze all enemies"); //this can probably be changed to go off team score so it works for tdm with rounds.
+            break;
         }
-    }
-    return true;
-}
-
-initializefreezetagteamstructs(){
-    level.freezetagteams = [];
-    foreach(team in level.teams){
-        level.freezetagteams[team] = spawnstruct();
-        level.freezetagteams[team].eliminated = false;
-        level.freezetagteams[team].numfrozen = 0;
-    }
-}
-
-freezetagmayspawn(){
-    if(is_true(player.freezetageliminated)){
-        return false;
     }
 }
