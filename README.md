@@ -21,6 +21,8 @@ Cranked
 ```
 Blitz
 ```
+# Infected
+Eliminated survivors become infected. Infect everyone, or survive the game to win.
 
 # Freezetag
 Shoot enemies to freeze them, stand near your frozen allies to free them. Last team with unfrozen players wins.
