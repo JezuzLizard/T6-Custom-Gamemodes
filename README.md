@@ -8,6 +8,9 @@ N/A
 
 **Incomplete gamemodes**
 ```
+Infected
+```
+```
 Freezetag
 ```
 
@@ -17,9 +20,6 @@ Cranked
 ```
 ```
 Blitz
-```
-```
-Infected
 ```
 
 # Freezetag
