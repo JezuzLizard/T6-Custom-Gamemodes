@@ -1,4 +1,4 @@
-# T6-Custom-Party-Games
+# T6-Custom-Gamemodes
 A selection of custom gamemodes for T6 created by JezuzLizard and Birchy. These mods have been designed to work in private match with your friends, though in the near future the ability to host various custom gamemodes on dedicated servers will be supported.
 
 **Current gamemodes**
