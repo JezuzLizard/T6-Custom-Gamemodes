@@ -3,9 +3,16 @@
 
 /**
     T6 Infected.
-    Updated: 12/03/2021.
-    Version: 0.1.
+    Updated: 15/03/2021.
+    Version: 0.2.
     Authors: Birchy & JezuzLizard.
+	Features:
+	-Player quota.
+	-Infection countdown.
+	-Survivor/Infected/First infected loadouts.
+	-Infection behaviour.
+	-Survivor/Infected win condition and end text.
+	-Team score is player count.
  */
 
  /**
@@ -13,8 +20,10 @@
 	-Popups for infection.
 	-Score for surviving.
 	-Audio queues.
+	-Remove class select prompt.
+	-Remove team switch ui.
 	-Time limit reached should favour survivors and game end text should show this.
-	-Countdown improved.
+	-Countdown improved/Player quota moved to same place.
 	-Randomised loadouts.
 	-Randomised first spawn.
 	-Specialist streaks.
@@ -24,20 +33,26 @@
 	-Gamemode name.
   */
 
-init(){//Should work as barebones infected implementation.
+init(){
+	level.devmode = 1;
+	level.minplayers = getdvarintdefault("infected_min_players", 3);
+	level.loadoutkillstreaksenabled = 0;
+	level.disableweapondrop = 1;
+	level.allow_teamchange = "0";
 	level.killedstub = level.onplayerkilled;
 	level.onplayerkilled = ::killed();
 	level.givecustomloadout = ::loadout();
-	level.loadoutkillstreaksenabled = 0;
-	level.disableweapondrop = 1;
 	level thread infected();
 	level thread connect();
-	level thread pre_game();
 }
 
-infected(){ //TODO: Tidy the inf loop.
-	thread add_bots(); //temp
-	level waittill( "gdm_player_quota_reached" );
+infected(){
+	level waittill("prematch_over");
+	while(level.players.size < level.minplayers){
+		iprintlnbold("Survivors ready " + level.players.size + "/" + level.minplayers);
+		wait 1;
+	}
+	setgametypesetting("timelimit", 5); //This function makes no sense. The more you use it, the more confusing it gets.
 	for(i = 10; i > 0; i--){
 		iprintlnbold("Infection countdown: " + i);
 		wait 1;
@@ -61,30 +76,21 @@ infected(){ //TODO: Tidy the inf loop.
 	}
 }
 
+connect(){
+	for(;;){
+		level waittill("connected", player);
+		player thread bot();
+		player maps\mp\teams\_teams::changeteam("axis");
+		player.infected = false;
+		player.firstinfected = false;
+	}
+}
+
 infect(){
 	first = level.players[randomint(level.players.size)];
 	first.firstinfected = true;
 	first maps\mp\teams\_teams::changeteam("allies");
 	iprintlnbold(first.name + " infected!");
-}
-
-on_player_disconnect()
-{
-	self waittill( "disconnect" );
-	level.gdm_player_num_required++;
-	level notify( "gdm_update_wait_message" );
-}
-
-connect(){
-	for(;;){
-		level waittill("connected", player);
-		player thread on_player_disconnect();
-		level.gdm_player_num_required--;
-		level notify( "gdm_update_wait_message" );
-		player maps\mp\teams\_teams::changeteam("axis");
-		player.infected = false;
-		player.firstinfected = false;
-	}
 }
 
 killed(inflictor, attacker, damage, meansofdeath, weapon, dir, hitloc, timeoffset, deathanimduration){
@@ -133,71 +139,12 @@ loadout(){
 	}
 }
 
-//temp 
-add_bots()
-{
-	while ( level.players.size < 1 )
-	{
-		wait 1;
-	}
-	thread spawnBot( 16 );
-}
-
-spawnBot( value )
-{
-	for( i = 0; i < value; i++ )
-	{
-		self thread maps\mp\bots\_bot::spawn_bot( "axis" );
-		wait 5;
-	}
-}
-
-pre_game(){
-	level.gdm_player_num_required = getDvarIntDefault( "infected_min_players", 3 );
-	level waittill( "prematch_over" );
-	maps/mp/_utility::registertimelimit( 0, 0 );
-	level thread wait_message_text_updater();
-	while ( level.gdm_player_num_required > 0 ){
-		wait 1;
-	}
-	level notify( "gdm_player_quota_reached" );
-	if ( isDefined( level.gdm_wait_message ) ){
-		level.gdm_wait_message destroy();
-	}
-	maps/mp/_utility::registertimelimit( 0, 720 );
-}
-
-create_wait_message_hud(){
-	waiting = newHudElem();
-   	waiting.horzAlign = "center";
-   	waiting.vertAlign = "middle";
-   	waiting.alignX = "center";
-   	waiting.alignY = "middle";
-   	waiting.y = 0;
-   	waiting.x = -1;
-   	waiting.foreground = 1;
-   	waiting.fontscale = 3.0;
-   	waiting.alpha = 1;
-   	waiting.color = ( 1.000, 1.000, 1.000 );
-	waiting.hidewheninmenu = 1;
-	return waiting;
-}
-
-wait_message_text_updater(){
-	level endon( "game_ended" );
-	level endon( "gdm_player_quota_reached" );
-	while ( 1 ){
-		if ( level.gdm_player_num_required > 1 ){
-			player_text = "Players";
-		}
-		else{
-			player_text = "Player";
-		}
-		level.gdm_wait_message = create_wait_message_hud();
-		level.gdm_wait_message setText( "Waiting For " + level.gdm_player_num_required + " More " + player_text );
-		level waittill( "gdm_update_wait_message" );
-		if ( isDefined( level.gdm_wait_message ) ){
-			level.gdm_wait_message destroy();
-		}
-	}
+bot(){
+	if(level.devmode == 0) return;
+    self endon("disconnect");
+    self notifyOnPlayerCommand( "bot", "bot");
+    for(;;){
+        self waittill("bot"); 
+        maps\mp\bots\_bot::spawn_bot(self.team);
+    } 
 }
