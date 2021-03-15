@@ -40,6 +40,7 @@ init(){
 	level.disableweapondrop = 1;
 	level.allow_teamchange = "0";
 	level.killedstub = level.onplayerkilled;
+	level.onTimeLimit = ::survivors_win;
 	level.onplayerkilled = ::killed();
 	level.givecustomloadout = ::loadout();
 	level thread infected();
@@ -48,10 +49,12 @@ init(){
 
 infected(){
 	level waittill("prematch_over");
+	level thread server_wait_timeout();
 	while(level.players.size < level.minplayers){
 		iprintlnbold("Survivors ready " + level.players.size + "/" + level.minplayers);
 		wait 1;
 	}
+	level notify( "gdm_player_quota_reached" );
 	setgametypesetting("timelimit", 5); //This function makes no sense. The more you use it, the more confusing it gets.
 	for(i = 10; i > 0; i--){
 		iprintlnbold("Infection countdown: " + i);
@@ -147,4 +150,20 @@ bot(){
         self waittill("bot"); 
         maps\mp\bots\_bot::spawn_bot(self.team);
     } 
+}
+
+survivors_win(){
+	makedvarserverinfo( "ui_text_endreason", "Survivors Win" );
+	setdvar( "ui_text_endreason", "Survivors Win" );
+	thread maps/mp/gametypes/_globallogic::endgame( "allies", "Survivors Win" );
+}
+
+server_wait_timeout()
+{
+	level endon( "gdm_player_quota_reached" );
+	for ( i = 0; i < 300; i++ )
+	{
+		wait 1;
+	}
+	map_restart( false );
 }
