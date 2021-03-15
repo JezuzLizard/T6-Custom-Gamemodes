@@ -6,25 +6,25 @@
 /**
     T6 Infected.
     Updated: 15/03/2021.
-    Version: 0.2.
+    Version: 0.3.
     Authors: Birchy & JezuzLizard.
 	Features:
 	-Player quota.
 	-Infection countdown.
 	-Survivor/Infected/First infected loadouts.
 	-Infection behaviour.
+	-First infected doesn't suicide (Like MW3).
+	-Client class and team select menu prompts removed.
 	-Survivor/Infected win condition and end text.
 	-Team score is player count.
+	-Audio queues.
  */
 
  /**
-	TODO (Not all possible as of 12/03/2021):
+	TODO (Not all possible as of 15/03/2021):
 	-Randomised first spawn.
-	-Remove class select prompt.
-	-Remove team switch ui.
 	-Popups for infection.
 	-Score for surviving.
-	-Audio queues.
 	-Randomised loadouts.
 	-Specialist streaks.
 	-MOAB.
@@ -35,13 +35,11 @@
 init(){
 	level.devmode = getdvarintdefault("infected_devmode", 0);
 	level.minplayers = getdvarintdefault("infected_min_players", 3);
-	level.loadoutkillstreaksenabled = 0;
-	level.disableweapondrop = 1;
-	level.allow_teamchange = "0";
+	level.ontimelimit = ::ontimelimit;
+	level.gettimelimit = ::gettimelimit;
 	level.killedstub = level.onplayerkilled;
-	level.ontimelimit = ::ontimelimit();
-	level.onplayerkilled = ::killed();
-	level.givecustomloadout = ::loadout();
+	level.onplayerkilled = ::killed;
+	level.givecustomloadout = ::loadout;
 	level thread infected();
 	level thread connect();
 }
@@ -53,13 +51,17 @@ infected(){
 	infectedtext setgamemodeinfopoint();
 	infectedtext setvalue(2);
 	infectedtext.hidewheninmenu = 1;
+	level.addtime = false;
+	level.addedtime = 0;
 	if(level.players.size < level.minplayers){
 		while(level.players.size < level.minplayers){
+			wait 1;
 			infectedtext setvalue(level.minplayers - level.players.size);
-			wait 0.05;
+			level.addedtime++;
 		}
-		map_restart(); //TODO: This should just restore time but hey who knows how to do that at the moment.
 	}
+	level.addedtime /= 60;
+	level.addtime = true;
 	infectedtext.label = &"Infection countdown: ";
 	for(i = 10; i > 0; i--){
 		infectedtext setvalue(i);
@@ -89,7 +91,7 @@ connect(){
 	for(;;){
 		level waittill("connected", player);
 		player thread devmode();
-		player maps\mp\teams\_teams::changeteam("allies");
+		player addtoteam("allies", true);
 		player.infected = false;
 		player.firstinfected = false;
 	}
@@ -99,25 +101,44 @@ infect(){
 	first = level.players[randomint(level.players.size)];
 	first.firstinfected = true;
 	first.infected = true;
-	first maps\mp\teams\_teams::changeteam("axis");
+	first addtoteam("axis", false);
+	first loadout();
 	iprintlnbold(first.name + " infected!");
+	playsoundonplayers("mpl_flagcapture_sting_enemy", "allies");
+	playsoundonplayers("mpl_flagcapture_sting_friend", "axis");
+}
+
+addtoteam(team, firstconnect){
+    self.pers["team"] = team;
+    self.team = team;
+	self.sessionteam = self.pers["team"];
+    self maps/mp/gametypes/_globallogic_ui::updateobjectivetext();
+	if(firstconnect) waittillframeend;
+	self notify("end_respawn");
 }
 
 killed(inflictor, attacker, damage, meansofdeath, weapon, dir, hitloc, timeoffset, deathanimduration){
-	//TODO: Maybe need to infect them on meansofdeath.
+	//TODO: Consider meansofdeath this is a bug.
 	if(!self.infected){
+		playsoundonplayers("mpl_flagcapture_sting_enemy", "allies");
+		playsoundonplayers("mpl_flagcapture_sting_friend", "axis");
 		if(attacker.firstinfected){
 			attacker.firstinfected = false;
 			attacker loadout();
 		}
 		self.infected = true;
-		self maps\mp\teams\_teams::changeteam("axis");
+		self addtoteam("axis", false);
+	}
+	if(getplayers("allies").size == 1){
+		getplayers("allies")[0] maps/mp/gametypes/_globallogic_audio::leaderdialogonplayer("last_one"); //TODO: Audio doesn't work.
 	}
 	[[level.killedstub]](inflictor, attacker, damage, meansofdeath, weapon, dir, hitloc, timeoffset, deathanimduration);
 }
 
 loadout(){
 	self clearperks();
+	self takeallweapons();
+	self giveweapon("knife_mp");
 	self setperk("specialty_fallheight");
 	self setperk("specialty_fastequipmentuse");
 	self setperk("specialty_fastladderclimb");
@@ -128,9 +149,7 @@ loadout(){
 	self setperk("specialty_longersprint");
 	self setperk("specialty_sprintrecovery");
 	self setperk("specialty_unlimitedsprint");
-	self takeallweapons();
-	self giveweapon("knife_mp");
-	if(self.infected){
+	if(is_true(self.infected)){
 		self giveweapon("knife_held_mp");
 		self giveweapon("hatchet_mp");
 		self giveWeapon("tactical_insertion_mp");
@@ -152,6 +171,12 @@ loadout(){
 
 ontimelimit(){
 	thread maps/mp/gametypes/_globallogic::endgame("allies", "Survivors win");
+}
+
+gettimelimit(){
+    timelimit = maps/mp/gametypes/_globallogic_defaults::default_gettimelimit();
+    if(level.addtime) return timelimit + level.addedtime;
+	return timelimit;
 }
 
 devmode(){
