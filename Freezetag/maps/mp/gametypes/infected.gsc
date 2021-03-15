@@ -32,11 +32,12 @@ init(){//Should work as barebones infected implementation.
 	level.disableweapondrop = 1;
 	level thread infected();
 	level thread connect();
+	level thread pre_game();
 }
 
 infected(){ //TODO: Tidy the inf loop.
 	thread add_bots(); //temp
-	level waittill("prematch_over");
+	level waittill( "gdm_player_quota_reached" );
 	for(i = 10; i > 0; i--){
 		iprintlnbold("Infection countdown: " + i);
 		wait 1;
@@ -67,9 +68,19 @@ infect(){
 	iprintlnbold(first.name + " infected!");
 }
 
+on_player_disconnect()
+{
+	self waittill( "disconnect" );
+	level.gdm_player_num_required++;
+	level notify( "gdm_update_wait_message" );
+}
+
 connect(){
 	for(;;){
 		level waittill("connected", player);
+		player thread on_player_disconnect();
+		level.gdm_player_num_required--;
+		level notify( "gdm_update_wait_message" );
 		player maps\mp\teams\_teams::changeteam("axis");
 		player.infected = false;
 		player.firstinfected = false;
@@ -125,10 +136,8 @@ loadout(){
 //temp 
 add_bots()
 {
-	players = get_players();
-	while ( players.size < 1 )
+	while ( level.players.size < 1 )
 	{
-		players = get_players();
 		wait 1;
 	}
 	thread spawnBot( 16 );
@@ -139,5 +148,56 @@ spawnBot( value )
 	for( i = 0; i < value; i++ )
 	{
 		self thread maps\mp\bots\_bot::spawn_bot( "axis" );
+		wait 5;
+	}
+}
+
+pre_game(){
+	level.gdm_player_num_required = getDvarIntDefault( "infected_min_players", 3 );
+	level waittill( "prematch_over" );
+	maps/mp/_utility::registertimelimit( 0, 0 );
+	level thread wait_message_text_updater();
+	while ( level.gdm_player_num_required > 0 ){
+		wait 1;
+	}
+	level notify( "gdm_player_quota_reached" );
+	if ( isDefined( level.gdm_wait_message ) ){
+		level.gdm_wait_message destroy();
+	}
+	maps/mp/_utility::registertimelimit( 0, 720 );
+}
+
+create_wait_message_hud(){
+	waiting = newHudElem();
+   	waiting.horzAlign = "center";
+   	waiting.vertAlign = "middle";
+   	waiting.alignX = "center";
+   	waiting.alignY = "middle";
+   	waiting.y = 0;
+   	waiting.x = -1;
+   	waiting.foreground = 1;
+   	waiting.fontscale = 3.0;
+   	waiting.alpha = 1;
+   	waiting.color = ( 1.000, 1.000, 1.000 );
+	waiting.hidewheninmenu = 1;
+	return waiting;
+}
+
+wait_message_text_updater(){
+	level endon( "game_ended" );
+	level endon( "gdm_player_quota_reached" );
+	while ( 1 ){
+		if ( level.gdm_player_num_required > 1 ){
+			player_text = "Players";
+		}
+		else{
+			player_text = "Player";
+		}
+		level.gdm_wait_message = create_wait_message_hud();
+		level.gdm_wait_message setText( "Waiting For " + level.gdm_player_num_required + " More " + player_text );
+		level waittill( "gdm_update_wait_message" );
+		if ( isDefined( level.gdm_wait_message ) ){
+			level.gdm_wait_message destroy();
+		}
 	}
 }
