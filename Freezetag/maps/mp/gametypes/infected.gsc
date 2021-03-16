@@ -18,14 +18,14 @@
 	-Survivor/Infected win condition and end text.
 	-Team score is player count.
 	-Audio queues.
+	-Random, configurable loadouts.
+	-Randomised first spawn.
  */
 
  /**
 	TODO (Not all possible as of 15/03/2021):
-	-Randomised first spawn.
 	-Popups for infection.
 	-Score for surviving.
-	-Randomised loadouts.
 	-Specialist streaks.
 	-MOAB.
 	-Team names.
@@ -34,10 +34,17 @@
 
 init(){
 	level.devmode = getdvarintdefault("infected_devmode", 0);
-	level.minplayers = getdvarintdefault("infected_min_players", 3);
+	level.minplayers = getdvarintdefault("infected_minplayers", 8);
+	level.loadout = [];
+	level.loadout["primary"] = randomelement(strtok(getdvarstringdefault("infected_primary", "mp7_mp+dualclip+fastads"), ","));
+	level.loadout["secondary"] = randomelement(strtok(getdvarstringdefault("infected_secondary", "fnp45_mp"), ","));
+	level.loadout["lethal"] = randomelement(strtok(getdvarstringdefault("infected_lethal", "sticky_grenade_mp"), ","));
+	level.loadout["tactical"] = randomelement(strtok(getdvarstringdefault("infected_tactical", "flash_grenade_mp"), ","));
+	level.allowtac = getdvarintdefault("infected_allowtac", 1);
+	level.allowtomo = getdvarintdefault("infected_allowtomo", 1);
 	level.ontimelimit = ::ontimelimit;
 	level.gettimelimit = ::gettimelimit;
-	level.killedstub = level.onplayerkilled;
+	level.usestartspawns = 0;
 	level.onplayerkilled = ::killed;
 	level.givecustomloadout = ::loadout;
 	level thread infected();
@@ -83,14 +90,14 @@ infected(){
 				infect();
 			}
 		}
-		wait 0.05;
+		wait 0.5;
 	}
 }
 
 connect(){
 	for(;;){
 		level waittill("connected", player);
-		player thread devmode();
+		if(level.devmode == 1) player thread devmode();
 		player addtoteam("allies", true);
 		player.infected = false;
 		player.firstinfected = false;
@@ -104,8 +111,8 @@ infect(){
 	first addtoteam("axis", false);
 	first loadout();
 	iprintlnbold(first.name + " infected!");
-	playsoundonplayers("mpl_flagcapture_sting_enemy", "allies");
-	playsoundonplayers("mpl_flagcapture_sting_friend", "axis");
+	thread playsoundonplayers("mpl_flagcapture_sting_enemy", "allies");
+	thread playsoundonplayers("mpl_flagcapture_sting_friend", "axis");
 }
 
 addtoteam(team, firstconnect){
@@ -118,10 +125,10 @@ addtoteam(team, firstconnect){
 }
 
 killed(inflictor, attacker, damage, meansofdeath, weapon, dir, hitloc, timeoffset, deathanimduration){
-	//TODO: Consider meansofdeath this is a bug.
+	//TODO: return if waiting for players, make them first infected if during countdown, make them infected if live (this will mean making the first infected guy not first infected loadout).
 	if(!self.infected){
-		playsoundonplayers("mpl_flagcapture_sting_enemy", "allies");
-		playsoundonplayers("mpl_flagcapture_sting_friend", "axis");
+		thread playsoundonplayers("mpl_flagcapture_sting_enemy", "allies");
+		thread playsoundonplayers("mpl_flagcapture_sting_friend", "axis");
 		if(attacker.firstinfected){
 			attacker.firstinfected = false;
 			attacker loadout();
@@ -129,43 +136,34 @@ killed(inflictor, attacker, damage, meansofdeath, weapon, dir, hitloc, timeoffse
 		self.infected = true;
 		self addtoteam("axis", false);
 	}
-	if(getplayers("allies").size == 1){
-		getplayers("allies")[0] maps/mp/gametypes/_globallogic_audio::leaderdialogonplayer("last_one"); //TODO: Audio doesn't work.
-	}
-	[[level.killedstub]](inflictor, attacker, damage, meansofdeath, weapon, dir, hitloc, timeoffset, deathanimduration);
+	//maps/mp/gametypes/_globallogic_audio::leaderdialogonplayer("encourage_last"); //TODO: Audio doesn't work.
 }
 
 loadout(){
 	self clearperks();
 	self takeallweapons();
 	self giveweapon("knife_mp");
-	self setperk("specialty_fallheight");
-	self setperk("specialty_fastequipmentuse");
-	self setperk("specialty_fastladderclimb");
-	self setperk("specialty_fastmantle");
-	self setperk("specialty_fastmeleerecovery");
-	self setperk("specialty_fasttoss");
-	self setperk("specialty_fastweaponswitch");
-	self setperk("specialty_longersprint");
-	self setperk("specialty_sprintrecovery");
-	self setperk("specialty_unlimitedsprint");
 	if(is_true(self.infected)){
 		self giveweapon("knife_held_mp");
-		self giveweapon("hatchet_mp");
-		self giveWeapon("tactical_insertion_mp");
+		if(level.allowtomo){
+			self giveweapon("hatchet_mp");
+			self setweaponammoclip("hatchet_mp", 1);
+		}
+		if(level.allowtac) self giveWeapon("tactical_insertion_mp");
 		if(self.firstinfected){
-			self giveweapon("pdw57_mp+silencer+extclip");
-			self switchtoweapon("pdw57_mp+silencer+extclip");
+			self giveweapon(level.loadout["primary"]);
+			self switchtoweapon(level.loadout["primary"]);
 		}else{
 			self switchtoweapon("knife_held_mp");
 		}
 	}else{
 		self setperk("specialty_scavenger");
-		self giveweapon("pdw57_mp+silencer+extclip");
-		self giveweapon("fiveseven_mp+fmj+extclip");
-		self giveweapon("claymore_mp");
-		self giveWeapon("flash_grenade_mp");
-		self switchtoweapon("pdw57_mp+silencer+extclip");
+		foreach(weapon in level.loadout){
+			self giveweapon(weapon);
+		}
+		self setweaponammoclip(level.loadout["lethal"], 1);
+		self setweaponammoclip(level.loadout["tactical"], 1);
+		self switchtoweapon(level.loadout["primary"]);
 	}
 }
 
@@ -179,8 +177,18 @@ gettimelimit(){
 	return timelimit;
 }
 
+getdvarstringdefault(dvar, dval){
+	if(getdvar(dvar) == ""){
+		return dval;
+	}
+	return getdvar(dvar);
+}
+
+randomelement(array){
+	return array[randomint(array.size)];
+}
+
 devmode(){
-	if(level.devmode == 0) return;
     self endon("disconnect");
     self notifyonplayercommand("bot", "bot");
 	self notifyonplayercommand("time", "time");
