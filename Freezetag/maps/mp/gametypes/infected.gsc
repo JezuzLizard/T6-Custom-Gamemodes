@@ -29,11 +29,11 @@
 	-Audio queues.
 	-Random, configurable loadouts.
 	-Randomised first spawn.
+	-Custom popup cards.
  */
 
  /**
 	TODO (Not all possible as of 15/03/2021):
-	-Popups for infection.
 	-Score for surviving.
 	-Specialist streaks.
 	-MOAB.
@@ -74,6 +74,9 @@ main(){
 }
 
 setupinfected(){
+	precachestring(&"Infected");
+	precachestring(&"First Infected");
+	precachestring(&"M.O.A.B.");
 	level.onspawnplayer = ::onspawnplayer;
 	level.onplayerkilled = ::onplayerkilled;
 	level.ontimelimit = ::ontimelimit;
@@ -86,8 +89,9 @@ setupinfected(){
 	level.loadout["tactical"] = randomelement(strtok(getdvarstringdefault("infected_tactical", "flash_grenade_mp"), ","));
 	level.allowtac = getdvarintdefault("infected_allowtac", 1);
 	level.allowtomo = getdvarintdefault("infected_allowtomo", 1);
-	level.devmode = getdvarintdefault("infected_devmode", 0);
+	level.devmode = getdvarintdefault("infected_devmode", 1);
 	level.minplayers = getdvarintdefault("infected_minplayers", 8);
+	level.moabvision = getdvarstringdefault("infected_moabvision", "tvguided_sp");
 	level thread connect();
 	level thread disconnect();
 	level thread countdown();
@@ -144,6 +148,7 @@ infect(){
 	first loadout();
 	thread playsoundonplayers("mpl_flagcapture_sting_enemy", "allies");
 	first iprintlnbold("^1First infected!");
+	infectednotify(&"First Infected", first);
 	updatescore();
 }
 
@@ -191,6 +196,7 @@ onplayerkilled(inflictor, attacker, damage, meansofdeath, weapon, dir, hitloc, o
 		}
 		self.infected = true;
 		self addtoteam("axis", false);
+		infectednotify(&"Infected", self);
 	}
 	updatescore();
 }
@@ -279,6 +285,12 @@ onstartgametype(){
 onspawnplayerunified(){
 	self.usingobj = undefined;
 	maps/mp/gametypes/_spawning::onspawnplayer_unified();
+}
+
+infectednotify(string, origin){
+	foreach(player in level.players){
+		player luinotifyevent(&"player_callout", 2, string, origin.entnum);
+	}
 }
 
 devmode(){
