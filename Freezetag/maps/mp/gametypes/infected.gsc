@@ -21,7 +21,7 @@
 	-Player quota.
 	-Infection countdown.
 	-Survivor/Infected/First infected loadouts.
-	-Infection behaviour.
+	-Infection behaviour (Handles edge cases like suicides, quitting early, etc).
 	-First infected doesn't suicide (Like MW3).
 	-Client class and team select menu prompts removed.
 	-Survivor/Infected win condition and end text.
@@ -30,21 +30,27 @@
 	-Random, configurable loadouts.
 	-Randomised first spawn.
 	-Custom popup cards.
+	-Remember rejoining infected players.
  */
 
  /**
 	TODO (Not all possible as of 15/03/2021):
-	-Score for surviving.
+	-Score popup for surviving.
 	-Specialist streaks.
 	-MOAB.
+	-Equipment limit for survivors.
 	-Team names.
 	-Gamemode name.
-	-suicide/leaving etc edge cases.
-	-perks for the infected.
-	-equipment limit for survivors.
-	-hide countdown text when game is over.
-	-Maintain a table of players so you cant rejoin to uninfect.
+	-Radar sweep in late game.
   */
+
+  /**	
+  	Feedback: Rejoining infected get survivor class.
+   sticky nade when stuff swaps
+   if someone self infects firstinfected doesnt lose gun.
+   if u are only infected (bc someone rage quit) give u gun.
+   dead silence for infect
+   */
 
 main(){
 	maps/mp/gametypes/_globallogic::init();
@@ -58,10 +64,6 @@ main(){
 	maps/mp/_utility::registernumlives(0, 100);
 	maps/mp/gametypes/_globallogic::registerfriendlyfiredelay(level.gametype, 15, 0, 1440);
 	setscoreboardcolumns("score", "kills", "deaths", "kdratio", "assists");
-	game["dialog"]["gametype"] = undefined;
-	game["dialog"]["gametype_hardcore"] = undefined;
-	game["dialog"]["offense_obj"] = undefined;
-	game["dialog"]["defense_obj"] = undefined;
 	level.scoreroundbased = getgametypesetting("roundscorecarry") == 0;
 	level.teamscoreperkill = getgametypesetting("teamScorePerKill");
 	level.teamscoreperdeath = getgametypesetting("teamScorePerDeath");
@@ -92,55 +94,50 @@ setupinfected(){
 	level.devmode = getdvarintdefault("infected_devmode", 1);
 	level.minplayers = getdvarintdefault("infected_minplayers", 8);
 	level.moabvision = getdvarstringdefault("infected_moabvision", "tvguided_sp");
+	level.infectedtable = [];
+	level.infectedtext = createserverfontstring("objective", 1.4);
+	level.infectedtext setgamemodeinfopoint();
+	level.infectedtext.hidewheninmenu = 1;
+	level.infectedtext.alpha = 0;
+	level.quotamet = 0;
+	level thread quota();
 	level thread connect();
 	level thread disconnect();
-	level thread countdown();
 }
 
-connect(){
-	for(;;){
-		level waittill("connected", player);
-		if(level.devmode == 1) player thread devmode();
-		player addtoteam("allies", true);
-		player.infected = false;
-		player.firstinfected = false;
-		updatescore();
-	}
-}
-
-disconnect(){
-	level waittill("disconnect", player);
-	updatescore();
-}
-
-countdown(){
+quota(){
 	level endon("game_ended");
 	level waittill("prematch_over");
-	text = createserverfontstring("objective", 1.4);
-	text setgamemodeinfopoint();
-	text.hidewheninmenu = 1;
 	level.addtime = false;
 	level.addedtime = 0;
 	if(level.players.size < level.minplayers){
-		text.label = &"Extra survivors required: ";
+		level.infectedtext.label = &"Extra survivors required: ";
 		while(level.players.size < level.minplayers){
 			wait 1;
-			text setvalue(level.minplayers - level.players.size);
+			level.infectedtext.alpha = 1;
+			level.infectedtext setvalue(level.minplayers - level.players.size);
 			level.addedtime++;
 		}
 		level.addedtime /= 60;
 		level.addtime = true;
+		level.infectedtext.alpha = 0;
 	}
-	text.label = &"Infection countdown: ";
-	for(i = 10; i > 0; i--){
-		text setvalue(i);
-		wait 1;
-	}
-	text destroy();
-	infect();
+	level.quotamet = 1;
+	updatescore();
 }
 
-infect(){
+
+infectfirst(){
+	level endon("game_ended");
+	level endon("stop_countdown");
+	level.infectedtext.label = &"Infection countdown: ";
+	level.infectedtext.alpha = 1;
+	for(i = 10; i > 0; i--){
+		level.infectedtext setvalue(i);
+		wait 1;
+	}
+	level.infectedtext.alpha = 0;
+	if(level.players.size < 2) map_restart();
 	first = level.players[randomint(level.players.size)];
 	first.firstinfected = true;
 	first.infected = true;
@@ -152,16 +149,47 @@ infect(){
 	updatescore();
 }
 
+connect(){
+	for(;;){
+		level waittill("connected", player);
+		logprint("DEBUG: connected player\n");
+		if(level.devmode == 1) player thread devmode();
+		if(isinarray(level.infectedtable, player.guid)){
+			level notify("stop_countdown");
+			level.infectedtext.alpha = 0;
+			player addtoteam("axis", true);
+			logprint("DEBUG: should have made them axis\n");
+			player.infected = true;
+		}else{
+			player addtoteam("allies", true);
+			logprint("DEBUG: should have made them allies\n");
+			player.infected = false;
+		}
+		player.firstinfected = false;
+		updatescore();
+		logprint("DEBUG: should have updated score\n");
+	}
+}
+
+disconnect(){
+	level waittill("disconnect", player);
+	if(player.infected && !isinarray(level.infectedtable, player.guid)){
+		level.infectedtable[level.infectedtable.size] = player.guid;
+	}
+	updatescore();
+}
+
 addtoteam(team, firstconnect){
     self.pers["team"] = team;
     self.team = team;
 	self.sessionteam = self.pers["team"];
     self maps/mp/gametypes/_globallogic_ui::updateobjectivetext();
-	if(firstconnect) waittillframeend;
+	//if(firstconnect) waittillframeend;
 	self notify("end_respawn");
 }
 
 ontimelimit(){
+	level.infectedtext.alpha = 0;
 	thread maps/mp/gametypes/_globallogic::endgame("allies", "Survivors win");
 }
 
@@ -183,17 +211,21 @@ randomelement(array){
 }
 
 onplayerkilled(inflictor, attacker, damage, meansofdeath, weapon, dir, hitloc, offsettime, deathanimduration){
-	//TODO: Suicide currently does not infect you.
-	if (!isplayer(attacker)){
+	if(level.quotamet == 0){
 		return;
 	}
 	if(!self.infected){
+		if (self.suicide == 1){
+			level notify("stop_countdown");
+			level.infectedtext.alpha = 0;
+		}else{
+			if(attacker.firstinfected){
+				attacker.firstinfected = false;
+				attacker loadout();
+			}
+		}
 		thread playsoundonplayers("mpl_flagcapture_sting_enemy", "allies");
 		thread playsoundonplayers("mpl_flagcapture_sting_friend", "axis");
-		if(attacker.firstinfected){
-			attacker.firstinfected = false;
-			attacker loadout();
-		}
 		self.infected = true;
 		self addtoteam("axis", false);
 		infectednotify(&"Infected", self);
@@ -218,6 +250,8 @@ updatescore(){
 	maps/mp/gametypes/_globallogic_score::updateteamscores("axis");
 	if(survivors == 0){
 		thread endgame("axis", "Survivors eliminated");
+	}else if(infected == 0 && survivors > 1 && level.quotamet){
+		infectfirst();
 	}
 }
 
@@ -226,6 +260,15 @@ loadout(){
 	self takeallweapons();
 	self giveweapon("knife_mp");
 	if(is_true(self.infected)){
+		self setperk("specialty_fallheight");
+		self setperk("specialty_fastequipmentuse");
+		self setperk("specialty_fastladderclimb");
+		self setperk("specialty_fastmantle");
+		self setperk("specialty_fastmeleerecovery");
+		self setperk("specialty_fasttoss");
+		self setperk("specialty_fastweaponswitch");
+		self setperk("specialty_longersprint");
+		self setperk("specialty_sprintrecovery");
 		self giveweapon("knife_held_mp");
 		if(level.allowtomo){
 			self giveweapon("hatchet_mp");
