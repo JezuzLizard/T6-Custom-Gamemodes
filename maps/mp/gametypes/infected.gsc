@@ -37,20 +37,20 @@
 	TODO (Not all possible as of 17/03/2021):
 	-Score popup for surviving.
 	-Specialist streaks.
-	-MOAB.
-	-Equipment limit for survivors.
-	-Team names.
-	-Gamemode name.
-	-Radar sweep in late game.
+	-M.O.A.B.
+	-Team names (Future).
+	-Gamemode name (Future).
   */
 
   /**	
   	Test feedback: 
-	-Rejoining infected get survivor class.
-	-Sticky nade when stuff swaps
-	-If someone self infects firstinfected doesnt lose gun.
-	-If u are only infected (bc someone rage quit) give u gun.
-	-dead silence for infect
+	-Rejoining players get the survivor class (Fixed).
+	-If somebody self infects, the first infected does not lose their gun (TODO).
+	-Limit lethals and tacticals to 1 (TODO).
+	-Radar sweep in late game (TODO).
+	-If you are the only infected as a result of someone quitting, give you a gun (Maybe).
+	-Equipment thrown before the first infected chosen will be lethal if they are no longer teammates (Maybe).
+	-Dead silence / No tactical insertion placement annoucement (Maybe).
    */
 
 main(){
@@ -158,13 +158,13 @@ connect(){
 		if(isinarray(level.infectedtable, player.guid)){
 			level notify("stop_countdown");
 			level.infectedtext.alpha = 0;
+			player.infected = true;
 			player addtoteam("axis", true);
 			logprint("DEBUG: should have made them axis\n");
-			player.infected = true;
 		}else{
+			player.infected = false;
 			player addtoteam("allies", true);
 			logprint("DEBUG: should have made them allies\n");
-			player.infected = false;
 		}
 		player.firstinfected = false;
 		updatescore();
