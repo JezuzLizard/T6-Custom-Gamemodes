@@ -12,7 +12,7 @@
 /**
     T6 Infected.
     Updated: 17/03/2021.
-    Version: 0.9.
+    Version: 0.9.1.
     Authors: Birchy & JezuzLizard.
 	Description: Eliminated survivors become infected. 
 	Infect everyone, or survive the game to win.
@@ -31,6 +31,7 @@
 	-Randomised first spawn.
 	-Custom popup cards.
 	-Remember rejoining infected players.
+	-Radar sweep activated when one survivor is left.
  */
 
  /**
@@ -45,9 +46,9 @@
   /**	
   	Test feedback: 
 	-Rejoining players get the survivor class (Fixed).
-	-If somebody self infects, the first infected does not lose their gun (TODO).
+	-If somebody self infects, the first infected does not lose their gun (Fixed).
 	-Limit lethals and tacticals to 1 (TODO).
-	-Radar sweep in late game (TODO).
+	-Radar sweep in late game (Added).
 	-If you are the only infected as a result of someone quitting, give you a gun (Maybe).
 	-Equipment thrown before the first infected chosen will be lethal if they are no longer teammates (Maybe).
 	-Dead silence / No tactical insertion placement annoucement (Maybe).
@@ -219,11 +220,15 @@ onplayerkilled(inflictor, attacker, damage, meansofdeath, weapon, dir, hitloc, o
 		if (self.suicide == 1){
 			level notify("stop_countdown");
 			level.infectedtext.alpha = 0;
-		}else{
-			if(attacker.firstinfected){
+			foreach(player in level.players){
+				if(player.firstinfected && (player != self)){
+					player.firstinfected = false;
+					player loadout();
+				}
+			}
+		}else if(attacker.firstinfected){
 				attacker.firstinfected = false;
 				attacker loadout();
-			}
 		}
 		thread playsoundonplayers("mpl_flagcapture_sting_enemy", "allies");
 		thread playsoundonplayers("mpl_flagcapture_sting_friend", "axis");
@@ -253,6 +258,10 @@ updatescore(){
 		thread endgame("axis", "Survivors eliminated");
 	}else if(infected == 0 && survivors > 1 && level.quotamet){
 		infectfirst();
+	}else if(survivors == 1){
+		foreach(player in level.players){
+			if(player.infected) setclientuivisibilityflag("g_compassShowEnemies", 1);
+		}
 	}
 }
 
