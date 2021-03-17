@@ -11,8 +11,8 @@
 
 /**
     T6 Infected.
-    Updated: 15/03/2021.
-    Version: 0.3.
+    Updated: 17/03/2021.
+    Version: 0.9.
     Authors: Birchy & JezuzLizard.
 	Description: Eliminated survivors become infected. 
 	Infect everyone, or survive the game to win.
@@ -34,7 +34,7 @@
  */
 
  /**
-	TODO (Not all possible as of 15/03/2021):
+	TODO (Not all possible as of 17/03/2021):
 	-Score popup for surviving.
 	-Specialist streaks.
 	-MOAB.
@@ -45,11 +45,12 @@
   */
 
   /**	
-  	Feedback: Rejoining infected get survivor class.
-   sticky nade when stuff swaps
-   if someone self infects firstinfected doesnt lose gun.
-   if u are only infected (bc someone rage quit) give u gun.
-   dead silence for infect
+  	Test feedback: 
+	-Rejoining infected get survivor class.
+	-Sticky nade when stuff swaps
+	-If someone self infects firstinfected doesnt lose gun.
+	-If u are only infected (bc someone rage quit) give u gun.
+	-dead silence for infect
    */
 
 main(){
