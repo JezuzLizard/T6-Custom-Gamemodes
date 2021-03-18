@@ -3,13 +3,10 @@ A selection of custom gamemodes for T6 created by JezuzLizard and Birchy.
 
 **Complete gamemodes**
 ```
-N/A
+Infected
 ```
 
 **Incomplete gamemodes**
-```
-Infected
-```
 ```
 Freezetag
 ```
