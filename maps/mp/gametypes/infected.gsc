@@ -95,7 +95,7 @@ setupinfected(){
 	level.loadout["tactical"] = randomelement(strtok(getdvarstringdefault("infected_tactical", "flash_grenade_mp"), ","));
 	level.allowtac = getdvarintdefault("infected_allowtac", 1);
 	level.allowtomo = getdvarintdefault("infected_allowtomo", 1);
-	level.devmode = getdvarintdefault("infected_devmode", 0);
+	level.devmode = getdvarintdefault("infected_devmode", 1);
 	level.minplayers = getdvarintdefault("infected_minplayers", 2);
 	level.moabvision = getdvarstringdefault("infected_moabvision", "tvguided_sp");
 	level.infectedtable = [];
@@ -163,6 +163,7 @@ infectfirst(){
 
 detonatemoab(detonator){
 	level endon("game_ended");
+	if(level.moabstarted == 1) return;
 	level notify("stop_countdown");
 	level.moabstarted = 1;
 	level.activecountdown = 1;
