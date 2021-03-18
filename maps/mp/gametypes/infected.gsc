@@ -12,7 +12,7 @@
 /**
     T6 Infected.
     Updated: 17/03/2021.
-    Version: 0.9.1.
+    Version: 1.0.
     Authors: Birchy & JezuzLizard.
 	Description: Eliminated survivors become infected. 
 	Infect everyone, or survive the game to win.
@@ -32,22 +32,23 @@
 	-Custom popup cards.
 	-Remember rejoining infected players.
 	-Radar sweep activated when one survivor is left.
+	-Add survived column instead of death to track how long a player lived for (Future).
+	-Specialist streaks (Fast hands gives fast mag).
+	-M.O.A.B.
  */
 
  /**
 	TODO (Not all possible as of 17/03/2021):
-	-Score popup for surviving.
-	-Specialist streaks.
-	-M.O.A.B.
-	-Team names (Future).
-	-Gamemode name (Future).
+	-Team names (Not possible).
+	-Gamemode name (Not possible).
+	-Score popup for surviving (Future).
   */
 
   /**	
   	Test feedback: 
 	-Rejoining players get the survivor class (Fixed).
 	-If somebody self infects, the first infected does not lose their gun (Fixed).
-	-Limit lethals and tacticals to 1 (TODO).
+	-Limit lethals and tacticals to 1 (Unfixed, likely only solution is manually reducing grenades on scav notify).
 	-Radar sweep in late game (Added).
 	-If you are the only infected as a result of someone quitting, give you a gun (Maybe).
 	-Equipment thrown before the first infected chosen will be lethal if they are no longer teammates (Maybe).
@@ -65,7 +66,7 @@ main(){
 	maps/mp/_utility::registerroundwinlimit(0, 10);
 	maps/mp/_utility::registernumlives(0, 100);
 	maps/mp/gametypes/_globallogic::registerfriendlyfiredelay(level.gametype, 15, 0, 1440);
-	setscoreboardcolumns("score", "kills", "deaths", "kdratio", "assists");
+	setscoreboardcolumns("score", "kills", "deaths", "assists", "survived");
 	level.scoreroundbased = getgametypesetting("roundscorecarry") == 0;
 	level.teamscoreperkill = getgametypesetting("teamScorePerKill");
 	level.teamscoreperdeath = getgametypesetting("teamScorePerDeath");
@@ -81,20 +82,21 @@ setupinfected(){
 	precachestring(&"Infected");
 	precachestring(&"First Infected");
 	precachestring(&"M.O.A.B.");
+	precacheshellshock("mortarblast_enemy");
 	level.onspawnplayer = ::onspawnplayer;
 	level.onplayerkilled = ::onplayerkilled;
 	level.ontimelimit = ::ontimelimit;
 	level.gettimelimit = ::gettimelimit;
 	level.givecustomloadout = ::loadout;
 	level.loadout = [];
-	level.loadout["primary"] = randomelement(strtok(getdvarstringdefault("infected_primary", "mp7_mp+dualclip+fastads"), ","));
+	level.loadout["primary"] = randomelement(strtok(getdvarstringdefault("infected_primary", "mp7_mp+fastads"), ","));
 	level.loadout["secondary"] = randomelement(strtok(getdvarstringdefault("infected_secondary", "fnp45_mp"), ","));
 	level.loadout["lethal"] = randomelement(strtok(getdvarstringdefault("infected_lethal", "sticky_grenade_mp"), ","));
 	level.loadout["tactical"] = randomelement(strtok(getdvarstringdefault("infected_tactical", "flash_grenade_mp"), ","));
 	level.allowtac = getdvarintdefault("infected_allowtac", 1);
 	level.allowtomo = getdvarintdefault("infected_allowtomo", 1);
 	level.devmode = getdvarintdefault("infected_devmode", 1);
-	level.minplayers = getdvarintdefault("infected_minplayers", 8);
+	level.minplayers = getdvarintdefault("infected_minplayers", 2);
 	level.moabvision = getdvarstringdefault("infected_moabvision", "tvguided_sp");
 	level.infectedtable = [];
 	level.infectedtext = createserverfontstring("objective", 1.4);
@@ -102,6 +104,8 @@ setupinfected(){
 	level.infectedtext.hidewheninmenu = 1;
 	level.infectedtext.alpha = 0;
 	level.quotamet = 0;
+	level.activecountdown = 0;
+	level.moabstarted = 0;
 	level thread quota();
 	level thread connect();
 	level thread disconnect();
@@ -132,6 +136,11 @@ quota(){
 infectfirst(){
 	level endon("game_ended");
 	level endon("stop_countdown");
+	if(level.activecountdown == 1){
+		return;
+	}else{
+		level.activecountdown = 1;
+	}
 	level.infectedtext.label = &"Infection countdown: ";
 	level.infectedtext.alpha = 1;
 	for(i = 10; i > 0; i--){
@@ -149,27 +158,67 @@ infectfirst(){
 	first iprintlnbold("^1First infected!");
 	infectednotify(&"First Infected", first);
 	updatescore();
+	level.activecountdown = 0;
+}
+
+detonatemoab(detonator){
+	level endon("game_ended");
+	level notify("stop_countdown");
+	level.moabstarted = 1;
+	level.activecountdown = 1;
+	level.infectedtext.label = &"M.O.A.B. Inbound: ";
+	level.infectedtext.alpha = 1;
+	infectednotify(&"M.O.A.B.", detonator);
+	for(i = 10; i > 0; i--){
+		level.infectedtext setvalue(i);
+		thread playsoundonplayers("mpl_flagcapture_sting_enemy");
+		wait 1;
+	}
+	level.infectedtext.alpha = 0;
+	thread playsoundonplayers("wpn_emp_bomb");
+	earthquake(0.2, 5, (0,0,0), 900000);
+	setdvar("timescale", 0.8);
+	wait 0.1;
+	setdvar("timescale", 0.6);
+	wait 0.1;
+	foreach(player in level.players){
+		player shellshock("mortarblast_enemy", 4);
+	}
+	setdvar("timescale", 0.4);
+	wait 0.1;
+	setdvar("timescale", 0.2);
+	visionsetnaked(level.moabvision, 2);
+	wait 0.75;
+	foreach(player in level.players){
+		if(player.infected){
+			player dodamage(9999, (0,0,0), detonator, detonator, "none", "MOD_SUICIDE");
+			player stopshellshock();
+		}
+	}
+	setdvar("timescale", 0.4);
+	wait 0.05;
+	setdvar("timescale", 0.8);
+	wait 0.1;
+	setdvar("timescale", 1);
+	level.activecountdown = 0;
 }
 
 connect(){
 	for(;;){
 		level waittill("connected", player);
-		logprint("DEBUG: connected player\n");
 		if(level.devmode == 1) player thread devmode();
+		player.firstinfected = false;
 		if(isinarray(level.infectedtable, player.guid)){
 			level notify("stop_countdown");
 			level.infectedtext.alpha = 0;
 			player.infected = true;
 			player addtoteam("axis", true);
-			logprint("DEBUG: should have made them axis\n");
+			player loadout();
 		}else{
 			player.infected = false;
 			player addtoteam("allies", true);
-			logprint("DEBUG: should have made them allies\n");
 		}
-		player.firstinfected = false;
 		updatescore();
-		logprint("DEBUG: should have updated score\n");
 	}
 }
 
@@ -186,7 +235,6 @@ addtoteam(team, firstconnect){
     self.team = team;
 	self.sessionteam = self.pers["team"];
     self maps/mp/gametypes/_globallogic_ui::updateobjectivetext();
-	//if(firstconnect) waittillframeend;
 	self notify("end_respawn");
 }
 
@@ -213,6 +261,7 @@ randomelement(array){
 }
 
 onplayerkilled(inflictor, attacker, damage, meansofdeath, weapon, dir, hitloc, offsettime, deathanimduration){
+	self maps/mp/gametypes/_wager::clearpowerups();
 	if(level.quotamet == 0){
 		return;
 	}
@@ -234,7 +283,32 @@ onplayerkilled(inflictor, attacker, damage, meansofdeath, weapon, dir, hitloc, o
 		thread playsoundonplayers("mpl_flagcapture_sting_friend", "axis");
 		self.infected = true;
 		self addtoteam("axis", false);
+		foreach(player in level.players){
+			if(!player.infected){
+				player.pers["survived"]++;
+                player.survived = player.pers["survived"];
+			}
+		}
 		infectednotify(&"Infected", self);
+	}else{
+		if(self.suicide == 0){
+			if(!isdefined(attacker.infectedbonus)){
+				attacker.infectedbonus = 0;
+			}
+			if(attacker.infectedbonus < level.poweruplist.size){
+				attacker maps/mp/gametypes/_wager::givepowerup(level.poweruplist[attacker.infectedbonus]);
+				attacker thread maps/mp/gametypes/_wager::wagerannouncer( "wm_bonus" + attacker.infectedbonus);
+				attacker.infectedbonus++;
+			}
+			if(attacker.infectedbonus >= level.poweruplist.size){
+				if(isdefined(attacker.powerups) && isdefined(attacker.powerups.size) && attacker.powerups.size > 0){
+					attacker thread maps/mp/gametypes/_wager::pulsepowerupicon(attacker.powerups.size - 1);
+				}
+			}
+			if(attacker.kills > 23){
+				level thread detonatemoab(attacker);
+			}
+		}
 	}
 	updatescore();
 }
@@ -260,7 +334,7 @@ updatescore(){
 		infectfirst();
 	}else if(survivors == 1){
 		foreach(player in level.players){
-			if(player.infected) setclientuivisibilityflag("g_compassShowEnemies", 1);
+			if(player.infected) player setclientuivisibilityflag("g_compassShowEnemies", 1);
 		}
 	}
 }
@@ -280,10 +354,7 @@ loadout(){
 		self setperk("specialty_longersprint");
 		self setperk("specialty_sprintrecovery");
 		self giveweapon("knife_held_mp");
-		if(level.allowtomo){
-			self giveweapon("hatchet_mp");
-			self setweaponammoclip("hatchet_mp", 1);
-		}
+		if(level.allowtomo) self giveweapon("hatchet_mp");
 		if(level.allowtac) self giveWeapon("tactical_insertion_mp");
 		if(self.firstinfected){
 			self giveweapon(level.loadout["primary"]);
@@ -292,12 +363,9 @@ loadout(){
 			self switchtoweapon("knife_held_mp");
 		}
 	}else{
-		self setperk("specialty_scavenger");
 		foreach(weapon in level.loadout){
 			self giveweapon(weapon);
 		}
-		self setweaponammoclip(level.loadout["lethal"], 1);
-		self setweaponammoclip(level.loadout["tactical"], 1);
 		self switchtoweapon(level.loadout["primary"]);
 	}
 }
@@ -333,6 +401,18 @@ onstartgametype(){
 	setmapcenter(level.mapcenter);
 	spawnpoint = maps/mp/gametypes/_spawnlogic::getrandomintermissionpoint();
 	setdemointermissionpoint(spawnpoint.origin, spawnpoint.angles);
+	maps/mp/gametypes/_wager::addpowerup("specialty_movefaster", "perk", &"PERKS_LIGHTWEIGHT", "perk_lightweight");
+	maps/mp/gametypes/_wager::addpowerup("specialty_fallheight", "perk", &"PERKS_LIGHTWEIGHT", "perk_lightweight");
+	maps/mp/gametypes/_wager::addpowerup("specialty_scavenger", "perk", &"PERKS_SCAVENGER", "perk_scavenger");
+	maps/mp/gametypes/_wager::addpowerup("specialty_fastequipmentuse", "perk", &"PERKS_FAST_HANDS", "perk_fast_hands");
+	maps/mp/gametypes/_wager::addpowerup("specialty_fasttoss", "perk", &"PERKS_FAST_HANDS", "perk_fast_hands");
+	maps/mp/gametypes/_wager::addpowerup("specialty_fastweaponswitch", "perk", &"PERKS_FAST_HANDS", "perk_fast_hands");
+	maps/mp/gametypes/_wager::addpowerup("specialty_fastreload", "perk", &"PERKS_FAST_HANDS", "perk_fast_hands");
+	maps/mp/gametypes/_wager::addpowerup("specialty_longersprint", "perk", &"PERKS_EXTREME_CONDITIONING", "perk_marathon");
+	maps/mp/gametypes/_wager::addpowerup("specialty_sprintrecovery", "perk", &"PERKS_DEXTERITY", "perk_dexterity");
+	maps/mp/gametypes/_wager::addpowerup("specialty_fastmantle", "perk", &"PERKS_DEXTERITY", "perk_dexterity");
+	maps/mp/gametypes/_wager::addpowerup("specialty_fastladderclimb", "perk", &"PERKS_DEXTERITY", "perk_dexterity");
+	maps/mp/gametypes/_wager::addpowerup("specialty_earnmoremomentum", "perk", &"PERKS_HARDLINE", "perk_hardline");
 }
 
 onspawnplayerunified(){
@@ -350,9 +430,10 @@ devmode(){
     self endon("disconnect");
     self notifyonplayercommand("bot", "bot");
 	self notifyonplayercommand("time", "time");
-	self setclientuivisibilityflag("g_compassShowEnemies", 2);
+	self notifyonplayercommand("radar", "radar");
+	self notifyonplayercommand("moab", "moab");
     for(;;){
-        command = self waittill_any_return("bot", "time");
+        command = self waittill_any_return("bot", "time", "radar", "moab");
 		switch(command){
 			case "bot":
 				maps\mp\bots\_bot::spawn_bot(self.team);
@@ -363,6 +444,12 @@ devmode(){
 				}else{
 					setdvar("timescale", 1.0);
 				}
+				break;
+			case "radar":
+				self setclientuivisibilityflag("g_compassShowEnemies", 2);
+				break;
+			case "moab":
+				level thread detonatemoab(self);
 				break;
 		}
     } 
