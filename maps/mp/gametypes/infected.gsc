@@ -79,6 +79,8 @@ main(){
 }
 
 setupinfected(){
+	flag_init("infected_game_start", 0);
+	flag_init("infected_grace_period_over", 0);
 	precachestring(&"Infected");
 	precachestring(&"First Infected");
 	precachestring(&"M.O.A.B.");
@@ -98,6 +100,10 @@ setupinfected(){
 	level.devmode = getdvarintdefault("infected_devmode", 0);
 	level.minplayers = getdvarintdefault("infected_minplayers", 2);
 	level.moabvision = getdvarstringdefault("infected_moabvision", "tvguided_sp");
+	level.newjoinsautoinfect = getdvarintdefault("infected_new_joins_auto_infect", 0);
+	level.showlastsurvivoronradar = getdvarintdefault("infected_show_last_survivor_on_radar", 0);
+	level.infectedgraceperiod = getdvarintdefault("infected_grace_period", 0);
+	level.tomoallowedmaplist = strtok(getdvarstringdefault("infected_map_tomahawks_allowed", ""), ",");
 	level.infectedtable = [];
 	level.infectedtext = createserverfontstring("objective", 1.4);
 	level.infectedtext setgamemodeinfopoint();
@@ -159,6 +165,19 @@ infectfirst(){
 	infectednotify(&"First Infected", first);
 	updatescore();
 	level.activecountdown = 0;
+	flag_set("infected_game_start");
+	level thread infectedgraceperiod();
+}
+
+infectedgraceperiod()
+{
+	if(level.infectedgraceperiod == 0){
+		return;
+	}
+	for(i = 0; i < level.infectedgraceperiod; i++){
+		wait 1;
+	}
+	flag_set("infected_grace_period_over");
 }
 
 detonatemoab(detonator){
@@ -209,12 +228,17 @@ connect(){
 		level waittill("connected", player);
 		if(level.devmode == 1) player thread devmode();
 		player.firstinfected = false;
-		if(isinarray(level.infectedtable, player.guid)){
+		if(isinarray(level.infectedtable, player.guid) ){
 			level notify("stop_countdown");
 			level.infectedtext.alpha = 0;
 			player.infected = true;
 			player addtoteam("axis", true);
 			player loadout();
+		else if(level.newjoinsautoinfect && flag( "infected_game_start" ) && flag("infected_grace_period_over")){
+			player.infected = true;
+			player addtoteam("axis", true);
+			player loadout();
+		}
 		}else{
 			player.infected = false;
 			player addtoteam("allies", true);
@@ -235,6 +259,7 @@ addtoteam(team, firstconnect){
     self.pers["team"] = team;
     self.team = team;
 	self.sessionteam = self.pers["team"];
+	self.pers[ "savedmodel" ] = undefined;
     self maps/mp/gametypes/_globallogic_ui::updateobjectivetext();
 	self notify("end_respawn");
 }
@@ -333,7 +358,7 @@ updatescore(){
 		thread endgame("axis", "Survivors eliminated");
 	}else if(infected == 0 && survivors > 1 && level.quotamet){
 		infectfirst();
-	}else if(survivors == 1){
+	}else if(survivors == 1 && level.showlastsurvivoronradar){
 		foreach(player in level.players){
 			if(player.infected) player setclientuivisibilityflag("g_compassShowEnemies", 1);
 		}
@@ -355,7 +380,12 @@ loadout(){
 		self setperk("specialty_longersprint");
 		self setperk("specialty_sprintrecovery");
 		self giveweapon("knife_held_mp");
-		if(level.allowtomo) self giveweapon("hatchet_mp");
+		if(level.allowtomo){
+			self giveweapon("hatchet_mp");
+		} 
+		else if(istomahawkallowedoncurrentmap()){
+			self giveweapon("hatchet_mp");
+		}
 		if(level.allowtac) self giveWeapon("tactical_insertion_mp");
 		if(self.firstinfected){
 			self giveweapon(level.loadout["primary"]);
@@ -402,18 +432,49 @@ onstartgametype(){
 	setmapcenter(level.mapcenter);
 	spawnpoint = maps/mp/gametypes/_spawnlogic::getrandomintermissionpoint();
 	setdemointermissionpoint(spawnpoint.origin, spawnpoint.angles);
-	maps/mp/gametypes/_wager::addpowerup("specialty_movefaster", "perk", &"PERKS_LIGHTWEIGHT", "perk_lightweight");
-	maps/mp/gametypes/_wager::addpowerup("specialty_fallheight", "perk", &"PERKS_LIGHTWEIGHT", "perk_lightweight");
-	maps/mp/gametypes/_wager::addpowerup("specialty_scavenger", "perk", &"PERKS_SCAVENGER", "perk_scavenger");
-	maps/mp/gametypes/_wager::addpowerup("specialty_fastequipmentuse", "perk", &"PERKS_FAST_HANDS", "perk_fast_hands");
-	maps/mp/gametypes/_wager::addpowerup("specialty_fasttoss", "perk", &"PERKS_FAST_HANDS", "perk_fast_hands");
-	maps/mp/gametypes/_wager::addpowerup("specialty_fastweaponswitch", "perk", &"PERKS_FAST_HANDS", "perk_fast_hands");
-	maps/mp/gametypes/_wager::addpowerup("specialty_fastreload", "perk", &"PERKS_FAST_HANDS", "perk_fast_hands");
-	maps/mp/gametypes/_wager::addpowerup("specialty_longersprint", "perk", &"PERKS_EXTREME_CONDITIONING", "perk_marathon");
-	maps/mp/gametypes/_wager::addpowerup("specialty_sprintrecovery", "perk", &"PERKS_DEXTERITY", "perk_dexterity");
-	maps/mp/gametypes/_wager::addpowerup("specialty_fastmantle", "perk", &"PERKS_DEXTERITY", "perk_dexterity");
-	maps/mp/gametypes/_wager::addpowerup("specialty_fastladderclimb", "perk", &"PERKS_DEXTERITY", "perk_dexterity");
-	maps/mp/gametypes/_wager::addpowerup("specialty_earnmoremomentum", "perk", &"PERKS_HARDLINE", "perk_hardline");
+	initializecustomaddpowerups();
+}
+
+initializecustomaddpowerups(){
+	perks = getdvarstringdefault( "infected_specialties", "lightweight,scavenger,fast_hands,extreme_conditioning,dexterity,hardline" )
+	perk_keys = strTok( perks, "," );
+	foreach ( perk in perk_keys ){
+		switch ( perk ){
+			case "lightweight":
+				maps/mp/gametypes/_wager::addpowerup("specialty_movefaster", "perk", &"PERKS_LIGHTWEIGHT", "perk_lightweight");
+				maps/mp/gametypes/_wager::addpowerup("specialty_fallheight", "perk", &"PERKS_LIGHTWEIGHT", "perk_lightweight");
+				break;
+			case "scavenger":
+				maps/mp/gametypes/_wager::addpowerup("specialty_scavenger", "perk", &"PERKS_SCAVENGER", "perk_scavenger");
+				break;
+			case "fast_hands":
+				maps/mp/gametypes/_wager::addpowerup("specialty_fastequipmentuse", "perk", &"PERKS_FAST_HANDS", "perk_fast_hands");
+				maps/mp/gametypes/_wager::addpowerup("specialty_fasttoss", "perk", &"PERKS_FAST_HANDS", "perk_fast_hands");
+				maps/mp/gametypes/_wager::addpowerup("specialty_fastweaponswitch", "perk", &"PERKS_FAST_HANDS", "perk_fast_hands");
+				maps/mp/gametypes/_wager::addpowerup("specialty_fastreload", "perk", &"PERKS_FAST_HANDS", "perk_fast_hands");
+				break;
+			case "extreme_conditioning":
+				maps/mp/gametypes/_wager::addpowerup("specialty_longersprint", "perk", &"PERKS_EXTREME_CONDITIONING", "perk_marathon");
+				break;
+			case "dexterity":
+				maps/mp/gametypes/_wager::addpowerup("specialty_sprintrecovery", "perk", &"PERKS_DEXTERITY", "perk_dexterity");
+				maps/mp/gametypes/_wager::addpowerup("specialty_fastmantle", "perk", &"PERKS_DEXTERITY", "perk_dexterity");
+				maps/mp/gametypes/_wager::addpowerup("specialty_fastladderclimb", "perk", &"PERKS_DEXTERITY", "perk_dexterity");
+				break;
+			case "hardline":
+				maps/mp/gametypes/_wager::addpowerup("specialty_earnmoremomentum", "perk", &"PERKS_HARDLINE", "perk_hardline");
+				break;
+		}
+	}
+}
+
+istomahawkallowedoncurrentmap(){
+	foreach(map in level.tomoallowedmaplist){
+		if(map == getdvar("mapname")){
+			return 1;
+		}
+	}
+	return 0;
 }
 
 onspawnplayerunified(){
