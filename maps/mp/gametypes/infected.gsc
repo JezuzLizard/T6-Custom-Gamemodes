@@ -104,6 +104,7 @@ setupinfected(){
 	level.showlastsurvivoronradar = getdvarintdefault("infected_show_last_survivor_on_radar", 0);
 	level.infectedgraceperiod = getdvarintdefault("infected_grace_period", 0);
 	level.tomoallowedmaplist = strtok(getdvarstringdefault("infected_map_tomahawks_allowed", ""), ",");
+	level.infected_deathstreaks = getDvarIntDefault("infected_using_deathstreaks", 0);
 	level.infectedtable = [];
 	level.infectedtext = createserverfontstring("objective", 1.4);
 	level.infectedtext setgamemodeinfopoint();
@@ -226,6 +227,9 @@ detonatemoab(detonator){
 connect(){
 	for(;;){
 		level waittill("connected", player);
+		if(level.infected_deathstreaks){
+			self thread deathstreak_think();
+		}
 		if(level.devmode == 1) player thread devmode();
 		player.firstinfected = false;
 		if(isinarray(level.infectedtable, player.guid) ){
@@ -234,12 +238,13 @@ connect(){
 			player.infected = true;
 			player addtoteam("axis", true);
 			player loadout();
+		}
 		else if(level.newjoinsautoinfect && flag( "infected_game_start" ) && flag("infected_grace_period_over")){
 			player.infected = true;
 			player addtoteam("axis", true);
 			player loadout();
 		}
-		}else{
+		else{
 			player.infected = false;
 			player addtoteam("allies", true);
 		}
@@ -436,7 +441,7 @@ onstartgametype(){
 }
 
 initializecustomaddpowerups(){
-	perks = getdvarstringdefault( "infected_specialties", "lightweight,scavenger,fast_hands,extreme_conditioning,dexterity,hardline" )
+	perks = getdvarstringdefault( "infected_specialties", "lightweight,scavenger,fast_hands,extreme_conditioning,dexterity,hardline" );
 	perk_keys = strTok( perks, "," );
 	foreach ( perk in perk_keys ){
 		switch ( perk ){
@@ -515,4 +520,72 @@ devmode(){
 				break;
 		}
     } 
+}
+
+register_deathstreaks(){
+	
+	if(!level.infected_deathstreaks) return;
+	register_deathstreak("martyrdom", 1, getDvarIntDefault("infected_martyrdom_deaths", 4), ::martyrdom_think, &"Martyrdom");
+	register_deathstreak("juiced", 2, getDvarIntDefault("infected_juiced_deaths", 6), ::juiced_think, &"Juiced");
+	register_deathstreak("painkiller", 3, getDvarIntDefault("infected_painkiller_deaths", 10), ::painkiller_think, &"Painkiller");
+}
+
+register_deathstreak(deathstreak_name, deathstreak_tier, deathstreak_deaths_required, deathstreak_function, deathstreak_screen_name){
+	if(!isDefined(level.deathstreaks)) level.deathstreaks = [];
+	level.deathstreaks[ deathstreak_name ] = spawnstruct();
+	level.deathstreaks[ deathstreak_name ].tier = deathstreak_tier;
+	level.deathstreaks[ deathstreak_name ].deaths = deathstreak_deaths_required;
+	level.deathstreaks[ deathstreak_name ].function = deathstreak_function;
+	level.deathstreaks[ deathstreak_name ].screen_name = deathstreak_screen_name;
+}
+
+deathstreak_think(){
+	self endon("disconnect");
+	kills = self.kills;
+	self.deathstreaks_array = [];
+	while(true){
+		self waittill("killed_player");
+		if(self.kills == kills){
+			self.deathstreak_consecutive_deaths++;
+		}
+		else if(self.kills != kills){
+			self.deathstreak_consecutive_deaths = 0;
+			kills = self.kills;
+			self.deathstreaks_array = [];
+			continue;
+		}
+		keys = getArrayKeys(level.deathstreaks);
+		foreach(deathstreak in keys){
+			if(is_true(self.deathstreaks_array[deathstreak])){
+			}
+			else if(level.deathstreaks[deathstreak].deaths <= self.deathstreak_consecutive_deaths){
+				self thread [[ level.deathstreaks[deathstreak].function ]]();
+				self.deathstreaks_array[deathstreak] = true;
+			}
+		}
+	}
+}
+
+martyrdom_think(){
+
+}
+
+juiced_think(){
+	self endon( "death" ); 
+	self waittill("spawned_player");
+	self setmovespeedscale(1.25);
+	self setperk("specialty_unlimitedsprint");
+	wait 10;
+	self setmovespeedscale(1);
+	self unsetperk("specialty_unlimitedsprint");
+}
+
+painkiller_think(){
+	self waittill("spawned_player");
+	self.maxhealth = 200;
+	self.health = self.maxhealth;
+	wait 10;
+	self.maxhealth = 100;
+	if ( self.health < self.maxhealth)
+	self.health = self.maxhealth;	
 }
