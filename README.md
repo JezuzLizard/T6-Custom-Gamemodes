@@ -13,6 +13,9 @@ Infected
 
 **Incomplete gamemodes**
 ```
+Drop Zone
+```
+```
 Freezetag
 ```
 
@@ -25,6 +28,9 @@ Blitz
 ```
 # Infected
 Eliminated survivors become infected. Infect everyone, or survive the game to win.
+
+# Drop Zone
+Secure the drop zone to earn points and care packages for your team.
 
 # Freezetag
 Shoot enemies to freeze them, stand near your frozen allies to free them. Last team with unfrozen players wins.
