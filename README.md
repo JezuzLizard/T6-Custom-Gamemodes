@@ -33,4 +33,4 @@ Eliminated survivors become infected. Infect everyone, or survive the game to wi
 Secure the drop zone to earn points and care packages for your team.
 
 # Freeze Tag
-Shoot enemies to freeze them, stand near your frozen allies to free them. Last team with unfrozen players wins.
+Shoot enemies to freeze them, stand near your frozen allies to unfreeze them. Last team standing wins.
