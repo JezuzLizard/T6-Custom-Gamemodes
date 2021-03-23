@@ -16,7 +16,7 @@ Infected
 Dropzone
 ```
 ```
-Freeze Tag
+Freezetag
 ```
 
 **Planned gamemodes**
@@ -32,5 +32,5 @@ Eliminated survivors become infected. Infect everyone, or survive the game to wi
 # Dropzone
 Secure the drop zone to earn points and care packages for your team.
 
-# Freeze Tag
+# Freezetag
 Shoot enemies to freeze them, stand near your frozen allies to unfreeze them. Last team standing wins.
